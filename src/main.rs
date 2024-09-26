@@ -2,6 +2,17 @@ use graphics::Drawable;
 use viering_chess::*;
 use ggez::*;
 
+/*
+TODO:
+
+Set path for resources to be in src/, not in target/debug/
+
+Handle promotion better
+
+Make it prettier
+
+*/
+
 const SQUARE_SIZE: f32 = 100.;
 
 const SCREEN_HEIGHT: f32 = SQUARE_SIZE * 8.;
@@ -11,41 +22,77 @@ const SCREEN_WIDTH: f32 = SQUARE_SIZE * 8.;
 
 struct State {
     game: Game,
-    board: Vec<graphics::Rect>
+    board: Vec<graphics::Rect>,
+    moves: Vec<Position>,
+    from: Position,
+    white_king: Position,
+    black_king: Position,
+}
+
+fn draw_square(rect: graphics::Rect, ctx: &mut Context, canvas: &mut graphics::Canvas, color: graphics::Color) {
+
+    let square = graphics::Mesh::new_rectangle(
+        ctx,
+        graphics::DrawMode::fill(),
+        rect,
+        color,
+    )
+    .expect("error creating square");
+    canvas.draw(&square, graphics::DrawParam::default());
+
 }
 
 impl ggez::event::EventHandler<GameError> for State {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         //event::process_event(ctx, event);
-
         Ok(())
     }
+    
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        
         let mut canvas =
             graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
 
         for i in 0..64 {
+            let mut move_here = false;
+            for p in &self.moves {
+                // Look if position is a possible move
+                if i / 8 == (p.y as usize) && i % 8 == (p.x as usize) {
+                    // Red Square
+                    draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(1.0, 0.0, 0.0, 1.0));
+
+                    move_here = true;
+                }
+            }
+            // White King is in check
+            if self.game.game_state == GameState::Check(Color::White) {
+                if i / 8 == (self.white_king.y as usize) && i % 8 == (self.white_king.x as usize) {
+                    // Red Square
+                    draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(1.0, 0.0, 0.0, 1.0));
+
+                    move_here = true;
+                }
+            }
+            // Black King is in check
+            if self.game.game_state == GameState::Check(Color::Black) {
+                if i / 8 == (self.black_king.y as usize) && i % 8 == (self.black_king.x as usize) {
+                    // Red Square
+                    draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(1.0, 0.0, 0.0, 1.0));
+
+                    move_here = true;
+                }
+            }
+
+            // Drew red square
+            if move_here { continue; }
+
+
             if i / 8 % 2 == 0 && i % 2 == 0 || i / 8 % 2 == 1 && i % 2 == 1{
-                let white_square = graphics::Mesh::new_rectangle(
-                    ctx,
-                    graphics::DrawMode::fill(),
-                    self.board[i],
-                    graphics::Color::new(1.0, 1.0, 1.0, 1.0),
-                )
-                .expect("error creating ball mesh");
-                //graphics::Mesh::from_data(ctx, white_square.build()).expect("White Square Error");
-                canvas.draw(&white_square, graphics::DrawParam::default());
+                // White Square
+                draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(1.0, 1.0, 1.0, 1.0));
                 continue;
             }
-            let black_square = graphics::Mesh::new_rectangle(
-                ctx,
-                graphics::DrawMode::fill(),
-                self.board[i],
-                graphics::Color::new(0.0, 0.0, 0.0, 1.0),
-            )
-            .expect("error creating ball mesh");
-            canvas.draw(&black_square, graphics::DrawParam::default());
+            // Black Square
+            draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(0.0, 0.0, 0.0, 1.0));
         }
 
         for i in 0..64 {
@@ -80,6 +127,74 @@ impl ggez::event::EventHandler<GameError> for State {
 
         Ok(())
     }
+
+
+    fn mouse_button_down_event(
+        &mut self,
+        _ctx: &mut Context,
+        _button: event::MouseButton,
+        x: f32,
+        y: f32,
+    ) -> Result<(), GameError> {
+        let sq_x: u8 = (x / SQUARE_SIZE) as u8;
+        let sq_y: u8 = (y / SQUARE_SIZE) as u8;
+
+        match self.game.game_state {
+            GameState::AwaitingPromotion(p) => {
+                let _result: MoveResult = self.game.promote(PieceType::Queen); 
+                return Ok(())
+            }
+            _ => (),
+        } 
+
+        // Get moves of piece
+        if self.moves.is_empty(){
+            println!("{} {}", sq_x, sq_y);
+
+            let piece = self.game.get_square(Position::new(sq_x, 7-sq_y));
+            // If piece doesnt exist or is of wrong color, dont show the moves of the piece
+            if piece.is_none() || piece.unwrap().color != self.game.turn {
+                return Ok(());
+            }
+
+            self.moves = self.game.get_possible_moves(Position::new(sq_x, 7-sq_y));
+            self.from = Position::new(sq_x, 7-sq_y);
+            return Ok(());
+        }
+        // Move piece to a highlighted square
+        for p in &self.moves {
+            if p.x == sq_x && p.y == 7-sq_y {
+                // Make Move
+                let result: MoveResult = self.game.make_move(Position::new(self.from.x, self.from.y), Position::new(sq_x, 7-sq_y)); 
+                match result {
+                    MoveResult::Allowed => println!("Allowed!"),
+                    MoveResult::Disallowed => println!("Disallowed!"),
+                }
+                match self.game.game_state {
+                    GameState::Normal => println!("Normal!"),
+                    GameState::AwaitingPromotion(_p) => println!("Awaiting promotion!"),
+                    _ => ()
+                }
+                self.moves = vec![];
+
+                for i in 0..64 {
+                    let piece_option = self.game.squares[i];
+                    if piece_option.is_some() {
+                        match piece_option.unwrap() {
+                            Piece {color: Color::White, piece_type: PieceType::King} => self.white_king = Position::new((i%8) as u8, (7-i/8) as u8),
+                            Piece {color: Color::Black, piece_type: PieceType::King} => self.black_king = Position::new((i%8) as u8, (7-i/8) as u8),
+                            _ => ()
+                        }
+                    }
+                }
+
+                return Ok(());
+            }
+        }
+        // Clear moves of piece
+        self.moves = vec![];
+        Ok(())
+    }
 }
 
 fn main() {
@@ -105,6 +220,10 @@ fn main() {
     let mut state = State {
         game: game,
         board: vec![],
+        moves: vec![],
+        from: Position::new(0,0),
+        white_king: Position::new(0,0),
+        black_king: Position::new(0,0),
     };
 
     for i in 0..64 {
