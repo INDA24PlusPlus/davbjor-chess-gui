@@ -1,0 +1,8 @@
+[package]
+name = "davbjor-chess-gui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+viering-chess = { git = "https://github.com/INDA24PlusPlus/viering-chess.git" }
+ggez = "0.9.3"
