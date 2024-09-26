@@ -117,18 +117,18 @@ Convert piece to path to its image
 */
 fn piece_to_path(piece: Option<Piece>) -> String {
     match piece {
-        Some(Piece {color: Color::White, piece_type: PieceType::Pawn})    => "/white_pawn_60.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Knight})  => "/white_knight_60.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Bishop})  => "/white_bishop_60.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Rook})    => "/white_rook_60.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Queen})   => "/white_queen_60.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::King})    => "/white_king_60.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Pawn})    => "/black_pawn_60.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Knight})  => "/black_knight_60.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Bishop})  => "/black_bishop_60.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Rook})    => "/black_rook_60.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Queen})   => "/black_queen_60.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::King})    => "/black_king_60.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Pawn})    => "/white_pawn.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Knight})  => "/white_knight.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Bishop})  => "/white_bishop.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Rook})    => "/white_rook.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Queen})   => "/white_queen.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::King})    => "/white_king.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Pawn})    => "/black_pawn.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Knight})  => "/black_knight.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Bishop})  => "/black_bishop.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Rook})    => "/black_rook.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Queen})   => "/black_queen.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::King})    => "/black_king.png".to_string(),
         None => "".to_string(),
     }
 }
@@ -194,22 +194,22 @@ impl ggez::event::EventHandler<GameError> for State {
         for i in 0..64 {
             if (i / 8 % 2 == 0 && i % 2 == 0) || (i / 8 % 2 == 1 && i % 2 == 1){
                 // Black Square
-                draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(0.0, 0.0, 0.0, opacity));
+                draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(0.71, 0.53, 0.39, opacity));
             }
             else {
                 // White Square
-                draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(1.0, 1.0, 1.0, opacity));
+                draw_square(self.board[i], ctx, &mut canvas, graphics::Color::new(0.94, 0.85, 0.71, opacity));
             }
 
             if self.board_moves[i] {
                 // Possible moves
                 if self.pieces[i].is_none() {
                     // Empty square hit
-                    draw_circle(self.board[i], ctx, &mut canvas, graphics::Color::new(0.0, 1.0, 0.0, opacity));                    
+                    draw_circle(self.board[i], ctx, &mut canvas, graphics::Color::new(0.08, 0.34, 0.12, 0.85));                    
                 }
                 else {
                     // Piece is hit
-                    draw_highlight(self.board[i], ctx, &mut canvas, graphics::Color::new(0.0, 1.0, 0.0, opacity));                    
+                    draw_highlight(self.board[i], ctx, &mut canvas, graphics::Color::new(0.08, 0.34, 0.12, 0.85));                    
                 }
             }
             
@@ -243,11 +243,11 @@ impl ggez::event::EventHandler<GameError> for State {
 
         // Draw possible promotion options
         if let GameState::AwaitingPromotion(p) = self.game.game_state {
-            let mut paths = vec![ "/white_queen_60.png", "/white_rook_60.png", "/white_bishop_60.png", "/white_knight_60.png"];
+            let mut paths = vec![ "/white_queen.png", "/white_rook.png", "/white_bishop.png", "/white_knight.png"];
             let mut dy: i32 = -1;
             if p.y == 0 {
                 // black
-                paths = vec!["/black_queen_60.png", "/black_rook_60.png", "/black_bishop_60.png", "/black_knight_60.png"]; 
+                paths = vec!["/black_queen.png", "/black_rook.png", "/black_bishop.png", "/black_knight.png"]; 
                 dy = 1;
             }
             for i in 0..4 {
