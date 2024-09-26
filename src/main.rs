@@ -117,18 +117,18 @@ Convert piece to path to its image
 */
 fn piece_to_path(piece: Option<Piece>) -> String {
     match piece {
-        Some(Piece {color: Color::White, piece_type: PieceType::Pawn})    => "/white_pawn.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Knight})  => "/white_knight.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Bishop})  => "/white_bishop.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Rook})    => "/white_rook.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::Queen})   => "/white_queen.png".to_string(),
-        Some(Piece {color: Color::White, piece_type: PieceType::King})    => "/white_king.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Pawn})    => "/black_pawn.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Knight})  => "/black_knight.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Bishop})  => "/black_bishop.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Rook})    => "/black_rook.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::Queen})   => "/black_queen.png".to_string(),
-        Some(Piece {color: Color::Black, piece_type: PieceType::King})    => "/black_king.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Pawn})    => "/white_pawn-min.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Knight})  => "/white_knight-min.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Bishop})  => "/white_bishop-min.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Rook})    => "/white_rook-min.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::Queen})   => "/white_queen-min.png".to_string(),
+        Some(Piece {color: Color::White, piece_type: PieceType::King})    => "/white_king-min.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Pawn})    => "/black_pawn-min.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Knight})  => "/black_knight-min.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Bishop})  => "/black_bishop-min.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Rook})    => "/black_rook-min.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::Queen})   => "/black_queen-min.png".to_string(),
+        Some(Piece {color: Color::Black, piece_type: PieceType::King})    => "/black_king-min.png".to_string(),
         None => "".to_string(),
     }
 }
@@ -215,7 +215,7 @@ impl ggez::event::EventHandler<GameError> for State {
             
             // King in check
             for color in [Color::White, Color::Black] {
-                if self.game.game_state == GameState::Check(color) {
+                if self.game.game_state == GameState::Check(color) || self.game.game_state == GameState::Checkmate(color) {
                     let piece = self.pieces[i].unwrap_or(Piece {color: Color::White, piece_type: PieceType::Pawn});
 
                     if piece.color == color && piece.piece_type == PieceType::King {
@@ -243,11 +243,11 @@ impl ggez::event::EventHandler<GameError> for State {
 
         // Draw possible promotion options
         if let GameState::AwaitingPromotion(p) = self.game.game_state {
-            let mut paths = vec![ "/white_queen.png", "/white_rook.png", "/white_bishop.png", "/white_knight.png"];
+            let mut paths = vec![ "/white_queen-min.png", "/white_rook-min.png", "/white_bishop-min.png", "/white_knight-min.png"];
             let mut dy: i32 = -1;
             if p.y == 0 {
                 // black
-                paths = vec!["/black_queen.png", "/black_rook.png", "/black_bishop.png", "/black_knight.png"]; 
+                paths = vec!["/black_queen-min.png", "/black_rook-min.png", "/black_bishop-min.png", "/black_knight-min.png"]; 
                 dy = 1;
             }
             for i in 0..4 {
