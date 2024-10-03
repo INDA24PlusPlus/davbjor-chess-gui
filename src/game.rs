@@ -8,6 +8,7 @@ use ggez::*;
 use chess_networking;
 use std::net::{TcpListener, TcpStream};
 
+#[derive(Debug, PartialEq, Clone)]
 enum ConnectionState {
     ClientStart,
     ServerStart,
@@ -18,8 +19,121 @@ enum ConnectionState {
 }
 
 
+struct Connection {
+    player_turn: bool,
+    expected: ConnectionState,
+    stream: Option<TcpStream>,
+}
+
+impl Connection {
+    fn new() -> Self {
+        Connection {
+            player_turn: true,
+            expected: ConnectionState::ClientStart,
+            stream: None,
+        }
+    }
+    fn next(&mut self) {
+        match self.expected {
+            ConnectionState::ClientStart => self.expected = ConnectionState::ClientMove,
+            ConnectionState::ServerStart => self.expected = ConnectionState::ServerMove,
+            ConnectionState::ClientMove => self.expected = ConnectionState::ClientAck,
+            ConnectionState::ServerMove => self.expected = ConnectionState::ServerAck,
+            ConnectionState::ClientAck => self.expected = ConnectionState::ClientMove,
+            ConnectionState::ServerAck => self.expected = ConnectionState::ServerMove
+        }
+    }
+    fn listen(&mut self) -> Result<(), String> {
+        // Start server
+        let listener = TcpListener::bind("127.0.0.1:5000").expect("Error listening on port");
+        
+        // accept connections and process them serially
+        let (stream, _addr) = listener.accept().expect("Error accepting connection");
+        //stream.set_nonblocking(true);
+
+        self.stream = Some(stream);
+
+        Ok(())
+    }
+    fn connect(&mut self) -> Result<(), String> {
+        let mut stream = TcpStream::connect("127.0.0.1:5000").expect("Error connecting");
+        self.stream = Some(stream);
+        Ok(())
+    }
+    fn write_start(&mut self, start: chess_networking::Start) {
+        if self.stream.is_some() {
+            start.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            println!("Sent packet");
+            return
+        }
+        print!("No stream");
+    }
+    fn write_move(&mut self, send_move: chess_networking::Move) {
+        if self.stream.is_some() {
+            send_move.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            println!("Sent packet");
+            return;
+        }
+        print!("No stream");
+    }
+    fn read_start(&mut self) -> Option<chess_networking::Start> {
+        if self.stream.is_none() { return None; }
+        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
+
+        let mut des  = rmp_serde::Deserializer::new(&mut stream);
+        let packet: chess_networking::Start = chess_networking::Start::deserialize(&mut des).expect("Could'nt read");
+
+        println!("Recieved: {}", packet.name.as_deref().unwrap_or("No-name"));
+
+        Some(packet)
+    }
+    fn read_move(&mut self) -> Option<chess_networking::Move> {
+        if self.stream.is_none() { return None; }
+        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
+        let _ = stream.set_nonblocking(true);
+
+        let mut des  = rmp_serde::Deserializer::new(&mut stream);
+        let packet: chess_networking::Move;
+        match chess_networking::Move::deserialize(&mut des) {
+            Ok(p) => packet = p,
+            Err(e) => {
+                return None;
+            }   
+        }
+        println!("Recieved: {} {}", packet.from.0, packet.from.1);
+
+        Some(packet)
+    }
+    fn write_ack(&mut self, send_ack: chess_networking::Ack) {
+        if self.stream.is_some() {
+            send_ack.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            println!("Sent Ack");
+            return;
+        }
+        print!("No stream");
+    }
+    fn read_ack(&mut self) -> Option<chess_networking::Ack> {
+        if self.stream.is_none() { return None; }
+        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
+        let _ = stream.set_nonblocking(true);
+
+        let mut des  = rmp_serde::Deserializer::new(&mut stream);
+        let packet: chess_networking::Ack;
+        match chess_networking::Ack::deserialize(&mut des) {
+            Ok(p) => packet = p,
+            Err(_e) => {
+                return None;
+            }   
+        }
+
+        println!("Recieved Ack: {}", packet.ok);
+
+        Some(packet)
+    }
+}
+/*
 struct Server {
-    server_turn: bool,
+    player_turn: bool,
     expected: ConnectionState,
     stream: Option<TcpStream>,
 }
@@ -27,13 +141,13 @@ struct Server {
 impl Server {
     fn new() -> Self {
         Server {
-            server_turn: true,
+            player_turn: true,
             expected: ConnectionState::ClientStart,
             stream: None,
         }
     }
     fn next(&mut self) {
-        if self.server_turn { self.expected = ConnectionState::ClientAck; }
+        if self.player_turn { self.expected = ConnectionState::ClientAck; }
         else                { self.expected = ConnectionState::ClientMove; }
     }
     fn listen(&mut self) -> Result<(), String> {
@@ -46,6 +160,11 @@ impl Server {
 
         self.stream = Some(stream);
 
+        Ok(())
+    }
+    fn connect(&mut self) -> Result<(), String> {
+        let mut stream = TcpStream::connect("127.0.0.1:5000").expect("Error connecting");
+        self.stream = Some(stream);
         Ok(())
     }
     fn write_start(&mut self, start: chess_networking::Start) {
@@ -80,7 +199,7 @@ impl Server {
     fn read_move(&mut self) -> Option<chess_networking::Move> {
         if self.stream.is_none() { return None; }
         let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
-        stream.set_nonblocking(true);
+        let _ = stream.set_nonblocking(true);
 
         let mut des  = rmp_serde::Deserializer::new(&mut stream);
         let packet: chess_networking::Move;
@@ -95,6 +214,34 @@ impl Server {
 
         }
         println!("Recieved: {} {}", packet.from.0, packet.from.1);
+
+        Some(packet)
+    }
+    fn write_ack(&mut self, send_ack: chess_networking::Ack) {
+        if self.stream.is_some() {
+            send_ack.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            println!("Sen't Acc");
+        }
+        else {
+            print!("No stream");
+        }
+    }
+    fn read_ack(&mut self) -> Option<chess_networking::Ack> {
+        if self.stream.is_none() { return None; }
+        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
+        let _ = stream.set_nonblocking(true);
+
+        let mut des  = rmp_serde::Deserializer::new(&mut stream);
+        let packet: chess_networking::Ack;
+        match chess_networking::Ack::deserialize(&mut des) {
+            Ok(p) => packet = p,
+            Err(_e) => {
+                return None;
+            }   
+
+        }
+
+        println!("Recieved Ack: {}", packet.ok);
 
         Some(packet)
     }
@@ -115,7 +262,7 @@ impl Client {
             stream: None,
         }
     }
-    fn _next(&mut self) {
+    fn next(&mut self) {
         if self.client_turn { self.expected = ConnectionState::ClientAck; }
         else                { self.expected = ConnectionState::ClientMove; }
     }
@@ -175,8 +322,36 @@ impl Client {
 
         Some(packet)
     }
-}
+    fn write_ack(&mut self, send_ack: chess_networking::Ack) {
+        if self.stream.is_some() {
+            send_ack.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            println!("Sen't Acc");
+        }
+        else {
+            print!("No stream");
+        }
+    }
+    fn read_ack(&mut self) -> Option<chess_networking::Ack> {
+        if self.stream.is_none() { return None; }
+        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
+        let _ = stream.set_nonblocking(true);
 
+        let mut des  = rmp_serde::Deserializer::new(&mut stream);
+        let packet: chess_networking::Ack;
+        match chess_networking::Ack::deserialize(&mut des) {
+            Ok(p) => packet = p,
+            Err(_e) => {
+                return None;
+            }   
+
+        }
+
+        println!("Recieved Ack: {}", packet.ok);
+
+        Some(packet)
+    }
+}
+*/
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Mode {
@@ -185,14 +360,20 @@ pub enum Mode {
     Singleplayer
 }
 
-fn start_server(name_1:&mut String, name_2: &mut String) -> Server {
+fn start_server(name_1:&mut String, name_2: &mut String) -> Connection {
     // Start a client
-    let mut server = Server::new();
+    let mut server = Connection {
+        player_turn: true,
+        expected: ConnectionState::ClientStart,
+        stream: None
+    };
+    //let mut server = Server::new();
     // Connect to the server
     let _ = server.listen();
 
     // Read start parameters
     let data = server.read_start();
+    server.next();
     // Store opponents name
     *name_2 = "White".to_string();
     *name_2 = data.expect("No data").name.unwrap_or("White".to_string());
@@ -213,9 +394,13 @@ fn start_server(name_1:&mut String, name_2: &mut String) -> Server {
     server
 }
 
-fn start_client(name_1:&mut String, name_2:&mut String) -> Client {
+fn start_client(name_1:&mut String, name_2:&mut String) -> Connection {
     // Start a client
-    let mut client = Client::new();
+    let mut client = Connection {
+        player_turn: false,
+        expected: ConnectionState::ServerStart,
+        stream: None
+    };
     // Connect to the server
     let _ = client.connect();
     
@@ -235,6 +420,7 @@ fn start_client(name_1:&mut String, name_2:&mut String) -> Client {
 
     // Read start parameters
     let data = client.read_start();
+    client.next();
     
     // Store opponents name
     *name_1 = "Black".to_string();
@@ -353,8 +539,8 @@ pub struct State {
     pub mode: Mode,
     pub name_1: String,
     pub name_2: String,
-    server: Option<Server>,
-    client: Option<Client>,
+    server: Option<Connection>,
+    client: Option<Connection>,
     
 }
 
@@ -395,22 +581,70 @@ impl State {
 impl ggez::event::EventHandler<GameError> for State {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         if self.mode == Mode::Client {
-            let x = self.client.as_mut().expect("Couldn't unpack client").read_move();
-            if x.is_some() {
-                let y = x.unwrap();
-                println!("{} {}, {} {}", y.from.0, y.from.1, y.to.0, y.to.1);
-                self.game.make_move(Position::new(y.from.0, y.from.1), Position::new(y.to.0, y.to.1));
-                self.client.as_mut().expect("No server to check turn of").client_turn = true;
+            // READ SERVER MOVE
+            if self.client.as_mut().expect("No client to check turn of").expected == ConnectionState::ServerMove {
+                let x = self.client.as_mut().expect("Couldn't unpack client").read_move();
+                let mut is_ok = false;
+                if x.is_some() {
+                    let y = x.unwrap();
+                    
+
+                    let res = self.game.make_move(Position::new(y.from.0, y.from.1), Position::new(y.to.0, y.to.1));
+                    if res == MoveResult::Allowed { is_ok = true; }
+                    self.client.as_mut().expect("No client to check turn of").player_turn = true;
+
+                    let send_ack = chess_networking::Ack { ok: is_ok, end_state: None };
+                    self.client.as_mut().expect("No client to check turn of").write_ack(send_ack);
+                }
+            }
+
+            // READ SERVER ACK
+            if self.client.as_mut().expect("No client to check turn of").expected == ConnectionState::ServerAck {
+                let x = self.client.as_mut().expect("Couldn't unpack client").read_ack();
+                if x.is_some() {
+                    let y = x.unwrap();
+
+                    if !y.ok {
+                        // Server did not accept servers move
+                        println!("Server did not accept servers move");
+                    }
+                    //self.server.as_mut().expect("No server to check turn of").player_turn = false;
+                    self.client.as_mut().expect("No client to check turn of").next();
+                }
             }
         }
 
         if self.mode == Mode::Server {
-            let x = self.server.as_mut().expect("Couldn't unpack server").read_move();
-            if x.is_some() {
-                let y = x.unwrap();
-                println!("{} {}, {} {}", y.from.0, y.from.1, y.to.0, y.to.1);
-                self.game.make_move(Position::new(y.from.0, y.from.1), Position::new(y.to.0, y.to.1));
-                self.server.as_mut().expect("No server to check turn of").server_turn = true;
+            // READ CLIENT MOVE
+            if self.server.as_mut().expect("No server to check turn of").expected == ConnectionState::ClientMove {
+                let x = self.server.as_mut().expect("Couldn't unpack server").read_move();
+                let mut is_ok = false;
+                if x.is_some() {
+                    let y = x.unwrap();
+                    
+                    let res = self.game.make_move(Position::new(y.from.0, y.from.1), Position::new(y.to.0, y.to.1));
+                    if res == MoveResult::Allowed { is_ok = true; }
+                    self.server.as_mut().expect("No server to check turn of").player_turn = true;
+                    self.server.as_mut().expect("No server to check next of").next();
+
+                    let send_ack = chess_networking::Ack { ok: is_ok, end_state: None };
+                    self.server.as_mut().expect("No client to check turn of").write_ack(send_ack);
+                }
+            }
+
+            // READ CLIENT ACK
+            if self.server.as_mut().expect("No server to check turn of").expected == ConnectionState::ClientAck {
+                let x = self.server.as_mut().expect("Couldn't unpack server").read_ack();
+                if x.is_some() {
+                    let y = x.unwrap();
+
+                    if !y.ok {
+                        // Client did not accept servers move
+                        println!("Client did not accept servers move");
+                    }
+                    //self.server.as_mut().expect("No server to check turn of").player_turn = false;
+                    self.server.as_mut().expect("No server to check next of").next();
+                }
             }
         }
 
@@ -545,13 +779,13 @@ impl ggez::event::EventHandler<GameError> for State {
         }
 
         if self.mode == Mode::Server {
-            if self.server.is_none() || self.server.as_mut().expect("No server").server_turn == false {
+            if self.server.is_none() || self.server.as_mut().expect("No server").player_turn == false {
                 return Ok(());
             }
         }
         
         if self.mode == Mode::Client {
-            if self.client.is_none() || self.client.as_mut().expect("No client").client_turn == false {
+            if self.client.is_none() || self.client.as_mut().expect("No client").player_turn == false {
                 return Ok(());
             }
         }
@@ -581,7 +815,7 @@ impl ggez::event::EventHandler<GameError> for State {
 
                             self.server.as_mut().expect("No server to send moves to").write_move(send_move);
                             self.server.as_mut().expect("No server to send next to").next();
-                            self.server.as_mut().expect("No server to check turn of").server_turn = false;
+                            self.server.as_mut().expect("No server to check turn of").player_turn = false;
                         }
 
                     },
@@ -602,7 +836,8 @@ impl ggez::event::EventHandler<GameError> for State {
                                 Position::new(self.from.x, self.from.y),
                                 Position::new(sq_x, sq_y)
                             );
-                            self.client.as_mut().expect("No server to check turn of").client_turn = false;
+                            self.client.as_mut().expect("No server to check turn of").player_turn = false;
+                            self.client.as_mut().expect("No server to send moves to").next();
                         }
 
                     },
