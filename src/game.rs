@@ -6,6 +6,7 @@ use viering_chess::*;
 use ggez::*;
 
 use chess_networking;
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -45,7 +46,7 @@ impl Connection {
     }
     fn listen(&mut self) -> Result<(), String> {
         // Start server
-        let listener = TcpListener::bind("127.0.0.1:5000").expect("Error listening on port");
+        let listener = TcpListener::bind("130.229.165.203:5001").expect("Error listening on port");
         
         // accept connections and process them serially
         let (stream, _addr) = listener.accept().expect("Error accepting connection");
@@ -56,23 +57,37 @@ impl Connection {
         Ok(())
     }
     fn connect(&mut self) -> Result<(), String> {
-        let mut stream = TcpStream::connect("127.0.0.1:5000").expect("Error connecting");
+        let mut stream = TcpStream::connect("130.229.128.225:8787").expect("Error connecting");
         self.stream = Some(stream);
         Ok(())
     }
     fn write_start(&mut self, start: chess_networking::Start) {
-        if self.stream.is_some() {
-            start.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+        //println!("{}", stream.as_mut().expect("Error reading stream").)
+        if let Some(stream) = self.stream.as_mut() {
+            //start.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            let mut buf = Vec::<u8>::try_from(start).unwrap();
+            stream.write_all(&mut buf).unwrap();
+
+
             println!("Sent packet");
             return
         }
         print!("No stream");
     }
     fn write_move(&mut self, send_move: chess_networking::Move) {
-        if self.stream.is_some() {
+        /*if self.stream.is_some() {
             send_move.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
             println!("Sent packet");
             return;
+        }*/
+        if let Some(stream) = self.stream.as_mut() {
+            //start.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            let mut buf = Vec::<u8>::try_from(send_move).unwrap();
+            stream.write_all(&mut buf).unwrap();
+
+
+            println!("Sent packet");
+            return
         }
         print!("No stream");
     }
@@ -105,10 +120,20 @@ impl Connection {
         Some(packet)
     }
     fn write_ack(&mut self, send_ack: chess_networking::Ack) {
-        if self.stream.is_some() {
+        /*if self.stream.is_some() {
             send_ack.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
             println!("Sent Ack");
             return;
+        }*/
+
+        if let Some(stream) = self.stream.as_mut() {
+            //start.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
+            let mut buf = Vec::<u8>::try_from(send_ack).unwrap();
+            stream.write_all(&mut buf).unwrap();
+
+
+            println!("Sent packet");
+            return
         }
         print!("No stream");
     }
@@ -131,227 +156,6 @@ impl Connection {
         Some(packet)
     }
 }
-/*
-struct Server {
-    player_turn: bool,
-    expected: ConnectionState,
-    stream: Option<TcpStream>,
-}
-
-impl Server {
-    fn new() -> Self {
-        Server {
-            player_turn: true,
-            expected: ConnectionState::ClientStart,
-            stream: None,
-        }
-    }
-    fn next(&mut self) {
-        if self.player_turn { self.expected = ConnectionState::ClientAck; }
-        else                { self.expected = ConnectionState::ClientMove; }
-    }
-    fn listen(&mut self) -> Result<(), String> {
-        // Start server
-        let listener = TcpListener::bind("127.0.0.1:5000").expect("Error listening on port");
-        
-        // accept connections and process them serially
-        let (stream, _addr) = listener.accept().expect("Error accepting connection");
-        //stream.set_nonblocking(true);
-
-        self.stream = Some(stream);
-
-        Ok(())
-    }
-    fn connect(&mut self) -> Result<(), String> {
-        let mut stream = TcpStream::connect("127.0.0.1:5000").expect("Error connecting");
-        self.stream = Some(stream);
-        Ok(())
-    }
-    fn write_start(&mut self, start: chess_networking::Start) {
-        if self.stream.is_some() {
-            start.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
-            println!("Sen't packet");
-        }
-        else {
-            print!("No stream");
-        }
-    }
-    fn write_move(&mut self, send_move: chess_networking::Move) {
-        if self.stream.is_some() {
-            send_move.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
-            println!("Sen't packet");
-        }
-        else {
-            print!("No stream");
-        }
-    }
-    fn read_start(&mut self) -> Option<chess_networking::Start> {
-        if self.stream.is_none() { return None; }
-        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
-
-        let mut des  = rmp_serde::Deserializer::new(&mut stream);
-        let packet: chess_networking::Start = chess_networking::Start::deserialize(&mut des).expect("Could'nt read");
-
-        println!("Recieved: {}", packet.name.as_deref().unwrap_or("No-name"));
-
-        Some(packet)
-    }
-    fn read_move(&mut self) -> Option<chess_networking::Move> {
-        if self.stream.is_none() { return None; }
-        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
-        let _ = stream.set_nonblocking(true);
-
-        let mut des  = rmp_serde::Deserializer::new(&mut stream);
-        let packet: chess_networking::Move;
-        match chess_networking::Move::deserialize(&mut des) {
-            Ok(p) => packet = p,
-            Err(e) => {
-                return None;
-            /*if e.kind() == std::io::ErrorKind::WouldBlock {
-                return None;
-            }*/ 
-            }   
-
-        }
-        println!("Recieved: {} {}", packet.from.0, packet.from.1);
-
-        Some(packet)
-    }
-    fn write_ack(&mut self, send_ack: chess_networking::Ack) {
-        if self.stream.is_some() {
-            send_ack.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
-            println!("Sen't Acc");
-        }
-        else {
-            print!("No stream");
-        }
-    }
-    fn read_ack(&mut self) -> Option<chess_networking::Ack> {
-        if self.stream.is_none() { return None; }
-        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
-        let _ = stream.set_nonblocking(true);
-
-        let mut des  = rmp_serde::Deserializer::new(&mut stream);
-        let packet: chess_networking::Ack;
-        match chess_networking::Ack::deserialize(&mut des) {
-            Ok(p) => packet = p,
-            Err(_e) => {
-                return None;
-            }   
-
-        }
-
-        println!("Recieved Ack: {}", packet.ok);
-
-        Some(packet)
-    }
-}
-
-
-struct Client {
-    client_turn: bool,
-    expected: ConnectionState,
-    stream: Option<TcpStream>,
-}
-
-impl Client {
-    fn new() -> Self {
-        Client {
-            client_turn: true,
-            expected: ConnectionState::ClientStart,
-            stream: None,
-        }
-    }
-    fn next(&mut self) {
-        if self.client_turn { self.expected = ConnectionState::ClientAck; }
-        else                { self.expected = ConnectionState::ClientMove; }
-    }
-    fn connect(&mut self) -> Result<(), String> {
-        let mut stream = TcpStream::connect("127.0.0.1:5000").expect("Error connecting");
-        self.stream = Some(stream);
-        Ok(())
-    }
-    fn write_start(&mut self, start: chess_networking::Start) {
-        if self.stream.is_some() {
-            start.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
-            println!("Sen't packet");
-        }
-        else {
-            print!("No stream");
-        }
-    }
-    fn write_move(&mut self, send_move: chess_networking::Move) {
-        if self.stream.is_some() {
-            send_move.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
-            println!("Sen't packet");
-        }
-        else {
-            print!("No stream");
-        }
-    }
-    fn read_start(&mut self) -> Option<chess_networking::Start> {
-        if self.stream.is_none() { return None; }
-        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
-
-        let mut des  = rmp_serde::Deserializer::new(&mut stream);
-        let packet: chess_networking::Start = chess_networking::Start::deserialize(&mut des).expect("Could'nt read");
-
-        println!("Recieved: {}", packet.name.as_deref().unwrap_or("No-name"));
-
-        Some(packet)
-    }
-    fn read_move(&mut self) -> Option<chess_networking::Move> {
-        if self.stream.is_none() { return None; }
-        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
-        let _ = stream.set_nonblocking(true);
-
-        let mut des  = rmp_serde::Deserializer::new(&mut stream);
-        let packet: chess_networking::Move;
-        match chess_networking::Move::deserialize(&mut des) {
-            Ok(p) => packet = p,
-            Err(_e) => {
-                return None;
-            /*if e.kind() == std::io::ErrorKind::WouldBlock {
-                return None;
-            }*/ 
-            }   
-
-        }
-
-        println!("Recieved: {} {}", packet.from.0, packet.from.1);
-
-        Some(packet)
-    }
-    fn write_ack(&mut self, send_ack: chess_networking::Ack) {
-        if self.stream.is_some() {
-            send_ack.serialize(&mut rmp_serde::Serializer::new(self.stream.as_mut().expect("No stream to serialize"))).expect("Couldn't serialize");
-            println!("Sen't Acc");
-        }
-        else {
-            print!("No stream");
-        }
-    }
-    fn read_ack(&mut self) -> Option<chess_networking::Ack> {
-        if self.stream.is_none() { return None; }
-        let mut stream = self.stream.as_mut().expect("Wierd error unwrapping stream");
-        let _ = stream.set_nonblocking(true);
-
-        let mut des  = rmp_serde::Deserializer::new(&mut stream);
-        let packet: chess_networking::Ack;
-        match chess_networking::Ack::deserialize(&mut des) {
-            Ok(p) => packet = p,
-            Err(_e) => {
-                return None;
-            }   
-
-        }
-
-        println!("Recieved Ack: {}", packet.ok);
-
-        Some(packet)
-    }
-}
-*/
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Mode {
@@ -517,6 +321,7 @@ impl MainState {
             moves: self.moves.clone(),
             board_moves: self.board_moves.clone(),
             from: self.from.clone(),
+            from_to: ((0,0),(0,0)),
             mode: self.mode.clone(),
             name_1: self.name_1.clone(),
             name_2: self.name_2.clone(),
@@ -536,6 +341,7 @@ pub struct State {
     moves: Vec<Position>,
     board_moves: Vec<bool>,
     from: Position,
+    from_to: ((u8, u8), (u8, u8)),
     pub mode: Mode,
     pub name_1: String,
     pub name_2: String,
@@ -553,6 +359,7 @@ impl State {
             moves: vec![],
             board_moves: vec![false; 64],
             from: Position::new(0,0),
+            from_to: ((0,0),(0,0)),
             mode: Mode::Singleplayer,
             name_1: "White".to_string(), 
             name_2: "Black".to_string(),
@@ -769,15 +576,34 @@ impl ggez::event::EventHandler<GameError> for State {
             // if blacks direction
             if self.game.turn == Color::White { direction = 1; }
             
+            let mut promotion_piece: chess_networking::PromotionPiece = chess_networking::PromotionPiece::Queen;
+            let mut piece_type: PieceType = PieceType::Queen;
             if sq_x == p.x {
-                if sq_y == (p.y as i32 + direction * 1) as u8 { let _result: MoveResult = self.game.promote(PieceType::Queen); }
-                if sq_y == (p.y as i32 + direction * 2) as u8 { let _result: MoveResult = self.game.promote(PieceType::Rook); }
-                if sq_y == (p.y as i32 + direction * 3) as u8 { let _result: MoveResult = self.game.promote(PieceType::Bishop); }
-                if sq_y == (p.y as i32 + direction * 4) as u8 { let _result: MoveResult = self.game.promote(PieceType::Knight); }
+                if sq_y == (p.y as i32 + direction * 1) as u8 { promotion_piece = chess_networking::PromotionPiece::Queen; piece_type = PieceType::Queen; }
+                if sq_y == (p.y as i32 + direction * 2) as u8 { promotion_piece = chess_networking::PromotionPiece::Rook; piece_type = PieceType::Rook; }
+                if sq_y == (p.y as i32 + direction * 3) as u8 { promotion_piece = chess_networking::PromotionPiece::Bishop; piece_type = PieceType::Bishop; }
+                if sq_y == (p.y as i32 + direction * 4) as u8 { promotion_piece = chess_networking::PromotionPiece::Knight; piece_type = PieceType::Knight; }
+                let _result: MoveResult = self.game.promote(piece_type);
             }
+
+            if let Mode::Server = self.mode {
+                let send_move = chess_networking::Move {
+                    from: (self.from_to.0.0, self.from_to.0.1),
+                    to: (self.from_to.1.0, self.from_to.1.1),
+                    promotion: Some(promotion_piece),
+                    forfeit: false,
+                    offer_draw: false
+                };
+
+                self.server.as_mut().expect("No server to send moves to").write_move(send_move);
+                self.server.as_mut().expect("No server to send next to").next();
+                self.server.as_mut().expect("No server to check turn of").player_turn = false;
+            }
+
             return Ok(());
         }
 
+        // Make sure its the right players turn in an online game
         if self.mode == Mode::Server {
             if self.server.is_none() || self.server.as_mut().expect("No server").player_turn == false {
                 return Ok(());
@@ -811,11 +637,17 @@ impl ggez::event::EventHandler<GameError> for State {
                         ); 
 
                         if MoveResult::Allowed == result {
-                            // Send move to client;
+                            if let GameState::AwaitingPromotion(p) = self.game.game_state {
+                                // Handle promotion
+                                self.from_to = ((self.from.x, self.from.y), (sq_x, sq_y));
+                            }
+                            else {
 
-                            self.server.as_mut().expect("No server to send moves to").write_move(send_move);
-                            self.server.as_mut().expect("No server to send next to").next();
-                            self.server.as_mut().expect("No server to check turn of").player_turn = false;
+                                // Send move to client;   
+                                self.server.as_mut().expect("No server to send moves to").write_move(send_move);
+                                self.server.as_mut().expect("No server to send next to").next();
+                                self.server.as_mut().expect("No server to check turn of").player_turn = false;
+                            }
                         }
 
                     },
